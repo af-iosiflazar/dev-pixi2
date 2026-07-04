@@ -42,15 +42,21 @@ export const TileSpriteKey = {
   wallOuterTopRight: "wall_outer_top_right",
 } as const;
 
-/** Map entity names to their sprite frame key */
-export const EntitySpriteKey: Record<string, string> = {
-  Player: "knight_m_idle_anim_f0",
-  Goblin: "goblin_idle_anim_f0",
-  Orc: "orc_warrior_idle_anim_f0",
-  Skeleton: "skelet_idle_anim_f0",
-  Bat: "imp_idle_anim_f0",
-  Slime: "slug_anim_f0",
+/** Map entity names to their sprite animation config (prefix + frame count) */
+export const EntitySpriteConfig: Record<
+  string,
+  { prefix: string; frames: number }
+> = {
+  Player: { prefix: "knight_m_idle_anim", frames: 4 },
+  Goblin: { prefix: "goblin_idle_anim", frames: 4 },
+  Orc: { prefix: "orc_warrior_idle_anim", frames: 4 },
+  Skeleton: { prefix: "skelet_idle_anim", frames: 4 },
+  Bat: { prefix: "imp_idle_anim", frames: 4 },
+  Slime: { prefix: "slug_anim", frames: 4 },
 };
+
+/** Animation speed for idle sprites (1 = 60fps, 0.15 ≈ 9fps) */
+export const IDLE_ANIM_SPEED = 0.15;
 
 export const COLORS = {
   playerHurt: 0xff4444,
