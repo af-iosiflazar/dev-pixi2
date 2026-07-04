@@ -1,5 +1,13 @@
 import type { Ticker } from "pixi.js";
-import { Container, Graphics, Sprite, Text, TextStyle, Texture } from "pixi.js";
+import {
+  AnimatedSprite,
+  Container,
+  Graphics,
+  Sprite,
+  Text,
+  TextStyle,
+  Texture,
+} from "pixi.js";
 
 import { engine } from "../../getEngine";
 import { MainScreen } from "../main/MainScreen";
@@ -9,13 +17,23 @@ import {
   MAP_HEIGHT,
   TILE_SIZE,
   SPRITE_SCALE,
+  IDLE_ANIM_SPEED,
   COLORS,
   TileType,
   TileSpriteKey,
+  DecorationSpriteConfig,
+  DECORATIONS_PER_ROOM,
 } from "./constants";
+import type { DecorationType } from "./constants";
 import { generateDungeon } from "./DungeonGenerator";
 import { GameMap } from "./GameMap";
 import { Entity, createPlayer, createEnemy } from "./Entity";
+
+interface Decoration {
+  x: number;
+  y: number;
+  sprite: AnimatedSprite;
+}
 
 enum GameState {
   Playing = 0,
@@ -32,11 +50,13 @@ export class GameScreen extends Container {
   private map!: GameMap;
   private player!: Entity;
   private enemies: Entity[] = [];
+  private decorations: Decoration[] = [];
   private messages: string[] = [];
   private turnCount = 0;
 
   private mapContainer: Container;
   private tileContainer: Container;
+  private decorationContainer: Container;
   private entityContainer: Container;
   private mapGraphics: Graphics;
   private uiContainer: Container;
@@ -62,6 +82,9 @@ export class GameScreen extends Container {
 
     this.tileContainer = new Container();
     this.mapContainer.addChild(this.tileContainer);
+
+    this.decorationContainer = new Container();
+    this.mapContainer.addChild(this.decorationContainer);
 
     this.mapGraphics = new Graphics();
     this.mapContainer.addChild(this.mapGraphics);
@@ -144,8 +167,10 @@ export class GameScreen extends Container {
   reset() {
     this.keysPressed.clear();
     this.enemies = [];
+    this.decorations = [];
     this.messages = [];
     this.tileContainer.removeChildren();
+    this.decorationContainer.removeChildren();
     this.entityContainer.removeChildren();
   }
 
@@ -185,6 +210,19 @@ export class GameScreen extends Container {
       }
     }
 
+    // Place decorations
+    this.decorations = [];
+    this.decorationContainer.removeChildren();
+    const occupiedTiles = new Set<string>();
+    occupiedTiles.add(`${this.player.x},${this.player.y}`);
+    for (const enemy of this.enemies) {
+      occupiedTiles.add(`${enemy.x},${enemy.y}`);
+    }
+    for (let ri = 1; ri < result.rooms.length; ri++) {
+      const room = result.rooms[ri];
+      this.placeDecorationsInRoom(room, occupiedTiles);
+    }
+
     // Create tile sprites
     this.tileContainer.removeChildren();
     for (let y = 0; y < MAP_HEIGHT; y++) {
@@ -217,6 +255,91 @@ export class GameScreen extends Container {
     this.overlayText.visible = false;
     this.addMessage("You descend into the dungeon...");
     this.render();
+  }
+
+  private placeDecorationsInRoom(
+    room: { x: number; y: number; w: number; h: number },
+    occupied: Set<string>,
+  ) {
+    // Collect available floor tiles in this room
+    const candidates: { x: number; y: number }[] = [];
+    for (let y = room.y; y < room.y + room.h; y++) {
+      for (let x = room.x; x < room.x + room.w; x++) {
+        if (!occupied.has(`${x},${y}`)) {
+          candidates.push({ x, y });
+        }
+      }
+    }
+    if (candidates.length === 0) return;
+
+    // Shuffle candidates for random picking
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+
+    let nextIdx = 0;
+    const pick = () =>
+      nextIdx < candidates.length ? candidates[nextIdx++] : null;
+
+    // Place chest
+    const chestCount = Math.floor(DECORATIONS_PER_ROOM.Chest);
+    for (let i = 0; i < chestCount; i++) {
+      const pos = pick();
+      if (pos) {
+        occupied.add(`${pos.x},${pos.y}`);
+        this.addDecoration(pos.x, pos.y, "Chest");
+      }
+    }
+
+    // Place coins
+    const coinCount = Math.floor(DECORATIONS_PER_ROOM.Coin);
+    for (let i = 0; i < coinCount; i++) {
+      const pos = pick();
+      if (pos) {
+        occupied.add(`${pos.x},${pos.y}`);
+        this.addDecoration(pos.x, pos.y, "Coin");
+      }
+    }
+
+    // Place potions (probabilistic)
+    const potions: DecorationType[] = [
+      "PotionRed",
+      "PotionBlue",
+      "PotionGreen",
+      "PotionYellow",
+    ];
+    for (const potion of potions) {
+      if (Math.random() < DECORATIONS_PER_ROOM[potion]) {
+        const pos = pick();
+        if (pos) {
+          occupied.add(`${pos.x},${pos.y}`);
+          this.addDecoration(pos.x, pos.y, potion);
+        }
+      }
+    }
+  }
+
+  private addDecoration(x: number, y: number, type: DecorationType) {
+    const cfg = DecorationSpriteConfig[type];
+    const textures =
+      cfg.frames > 1
+        ? Array.from({ length: cfg.frames }, (_, i) =>
+            Texture.from(`${cfg.prefix}_f${i}.png`),
+          )
+        : [Texture.from(`${cfg.prefix}.png`)];
+    const sprite = new AnimatedSprite(textures);
+    sprite.scale.set(SPRITE_SCALE);
+    sprite.anchor.set(0.5, 0.5);
+    sprite.x = x * TILE_SIZE + TILE_SIZE / 2;
+    sprite.y = y * TILE_SIZE + TILE_SIZE / 2;
+    if (cfg.frames > 1) {
+      sprite.animationSpeed = IDLE_ANIM_SPEED;
+      sprite.play();
+    }
+    sprite.visible = false;
+    this.decorationContainer.addChild(sprite);
+    this.decorations.push({ x, y, sprite });
   }
 
   /** Pick the right wall sprite based on which neighbors are floor tiles */
@@ -438,6 +561,7 @@ export class GameScreen extends Container {
 
   private render() {
     this.renderTiles();
+    this.renderDecorations();
     this.renderEntities();
     this.updateUI();
   }
@@ -458,6 +582,17 @@ export class GameScreen extends Container {
         sprite.tint = 0xffffff;
       } else {
         sprite.tint = 0x555555;
+      }
+    }
+  }
+
+  private renderDecorations() {
+    for (const dec of this.decorations) {
+      if (this.map.explored[dec.y][dec.x]) {
+        dec.sprite.visible = true;
+        dec.sprite.tint = this.map.visible[dec.y][dec.x] ? 0xffffff : 0x555555;
+      } else {
+        dec.sprite.visible = false;
       }
     }
   }
