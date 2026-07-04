@@ -9,6 +9,8 @@ import { PausePopup } from "../../popups/PausePopup";
 import { SettingsPopup } from "../../popups/SettingsPopup";
 import { Button } from "../../ui/Button";
 
+import { GameScreen } from "../dungeon/GameScreen";
+
 import { Bouncer } from "./Bouncer";
 
 /** The screen that holds the app */
@@ -19,6 +21,7 @@ export class MainScreen extends Container {
   public mainContainer: Container;
   private pauseButton: FancyButton;
   private settingsButton: FancyButton;
+  private playButton: Button;
   private addButton: FancyButton;
   private removeButton: FancyButton;
   private bouncer: Bouncer;
@@ -64,6 +67,17 @@ export class MainScreen extends Container {
       engine().navigation.presentPopup(SettingsPopup),
     );
     this.addChild(this.settingsButton);
+
+    this.playButton = new Button({
+      text: "Play",
+      width: 200,
+      height: 80,
+      fontSize: 36,
+    });
+    this.playButton.onPress.connect(() =>
+      engine().navigation.showScreen(GameScreen),
+    );
+    this.addChild(this.playButton);
 
     this.addButton = new Button({
       text: "Add",
@@ -118,6 +132,8 @@ export class MainScreen extends Container {
     this.pauseButton.y = 30;
     this.settingsButton.x = width - 30;
     this.settingsButton.y = 30;
+    this.playButton.x = width / 2;
+    this.playButton.y = height / 2;
     this.removeButton.x = width / 2 - 100;
     this.removeButton.y = height - 75;
     this.addButton.x = width / 2 + 100;
@@ -133,6 +149,7 @@ export class MainScreen extends Container {
     const elementsToAnimate = [
       this.pauseButton,
       this.settingsButton,
+      this.playButton,
       this.addButton,
       this.removeButton,
     ];
