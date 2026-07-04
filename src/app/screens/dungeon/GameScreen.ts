@@ -1,5 +1,5 @@
 import type { Ticker } from "pixi.js";
-import { Container, Graphics, Text, TextStyle } from "pixi.js";
+import { Container, Graphics, Sprite, Text, TextStyle, Texture } from "pixi.js";
 
 import { engine } from "../../getEngine";
 import { MainScreen } from "../main/MainScreen";
@@ -8,8 +8,10 @@ import {
   MAP_WIDTH,
   MAP_HEIGHT,
   TILE_SIZE,
+  SPRITE_SCALE,
   COLORS,
   TileType,
+  TileSpriteKey,
 } from "./constants";
 import { generateDungeon } from "./DungeonGenerator";
 import { GameMap } from "./GameMap";
@@ -24,7 +26,7 @@ enum GameState {
 }
 
 export class GameScreen extends Container {
-  public static assetBundles: string[] = [];
+  public static assetBundles = ["default"];
 
   private gameState = GameState.Playing;
   private map!: GameMap;
@@ -34,8 +36,9 @@ export class GameScreen extends Container {
   private turnCount = 0;
 
   private mapContainer: Container;
-  private mapGraphics: Graphics;
+  private tileContainer: Container;
   private entityContainer: Container;
+  private mapGraphics: Graphics;
   private uiContainer: Container;
   private hpText: Text;
   private turnText: Text;
@@ -56,6 +59,9 @@ export class GameScreen extends Container {
 
     this.mapContainer = new Container();
     this.addChild(this.mapContainer);
+
+    this.tileContainer = new Container();
+    this.mapContainer.addChild(this.tileContainer);
 
     this.mapGraphics = new Graphics();
     this.mapContainer.addChild(this.mapGraphics);
@@ -139,6 +145,7 @@ export class GameScreen extends Container {
     this.keysPressed.clear();
     this.enemies = [];
     this.messages = [];
+    this.tileContainer.removeChildren();
     this.entityContainer.removeChildren();
   }
 
@@ -178,17 +185,56 @@ export class GameScreen extends Container {
       }
     }
 
+    // Create tile sprites
+    this.tileContainer.removeChildren();
+    for (let y = 0; y < MAP_HEIGHT; y++) {
+      for (let x = 0; x < MAP_WIDTH; x++) {
+        const tile = this.map.tiles[y][x];
+        const textureKey =
+          tile === TileType.Wall
+            ? this.getWallTextureKey(x, y)
+            : TileSpriteKey.floor[
+                Math.floor(Math.random() * TileSpriteKey.floor.length)
+              ];
+        const sprite = new Sprite(Texture.from(`${textureKey}.png`));
+        sprite.scale.set(SPRITE_SCALE);
+        sprite.x = x * TILE_SIZE;
+        sprite.y = y * TILE_SIZE;
+        sprite.visible = false;
+        this.tileContainer.addChild(sprite);
+      }
+    }
+
+    // Add entity sprites
     this.entityContainer.removeChildren();
-    this.entityContainer.addChild(this.player.graphics);
+    this.entityContainer.addChild(this.player.sprite);
     this.entityContainer.addChild(this.player.hpBar);
     for (const enemy of this.enemies) {
-      this.entityContainer.addChild(enemy.graphics);
+      this.entityContainer.addChild(enemy.sprite);
       this.entityContainer.addChild(enemy.hpBar);
     }
 
     this.overlayText.visible = false;
     this.addMessage("You descend into the dungeon...");
     this.render();
+  }
+
+  /** Pick the right wall sprite based on which neighbors are floor tiles */
+  private getWallTextureKey(x: number, y: number): string {
+    const isFloor = (cx: number, cy: number) =>
+      cy >= 0 && cy < MAP_HEIGHT && cx >= 0 && cx < MAP_WIDTH
+        ? this.map.tiles[cy][cx] === TileType.Floor
+        : false;
+
+    const w = isFloor(x - 1, y);
+    const e = isFloor(x + 1, y);
+
+    // Side edges — show adjacent face
+    if (w && !e) return TileSpriteKey.wallLeft;
+    if (e && !w) return TileSpriteKey.wallRight;
+
+    // Default: wall face (mid)
+    return TileSpriteKey.wall;
   }
 
   private handleKeyDown(event: KeyboardEvent) {
@@ -397,25 +443,21 @@ export class GameScreen extends Container {
   }
 
   private renderTiles() {
-    this.mapGraphics.clear();
+    for (let i = 0; i < this.tileContainer.children.length; i++) {
+      const sprite = this.tileContainer.children[i];
+      const x = i % MAP_WIDTH;
+      const y = Math.floor(i / MAP_WIDTH);
 
-    for (let y = 0; y < MAP_HEIGHT; y++) {
-      for (let x = 0; x < MAP_WIDTH; x++) {
-        if (!this.map.explored[y][x]) continue;
+      if (!this.map.explored[y][x]) {
+        sprite.visible = false;
+        continue;
+      }
 
-        const tile = this.map.tiles[y][x];
-        const isVisible = this.map.visible[y][x];
-
-        let color: number;
-        if (tile === TileType.Wall) {
-          color = isVisible ? COLORS.wallVisible : COLORS.wallExplored;
-        } else {
-          color = isVisible ? COLORS.floorVisible : COLORS.floorExplored;
-        }
-
-        this.mapGraphics
-          .rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-          .fill({ color });
+      sprite.visible = true;
+      if (this.map.visible[y][x]) {
+        sprite.tint = 0xffffff;
+      } else {
+        sprite.tint = 0x555555;
       }
     }
   }
@@ -425,10 +467,10 @@ export class GameScreen extends Container {
     for (const enemy of this.enemies) {
       if (enemy.isAlive && this.map.visible[enemy.y][enemy.x]) {
         enemy.draw();
-        enemy.graphics.visible = true;
+        enemy.sprite.visible = true;
         enemy.hpBar.visible = true;
       } else {
-        enemy.graphics.visible = false;
+        enemy.sprite.visible = false;
         enemy.hpBar.visible = false;
       }
     }
@@ -441,7 +483,7 @@ export class GameScreen extends Container {
       this.hpText.style = new TextStyle({
         fontFamily: "monospace",
         fontSize: 14,
-        fill: COLORS.enemy,
+        fill: COLORS.playerHurt,
       });
     } else {
       this.hpText.style = new TextStyle({
