@@ -4,9 +4,9 @@ import type { Text } from "pixi.js";
 import { BlurFilter, Container, Sprite, Texture } from "pixi.js";
 
 import { engine } from "../getEngine";
-import { Button } from "../ui/Button";
 import { Label } from "../ui/Label";
 import { RoundedBox } from "../ui/RoundedBox";
+import { StoneButton } from "../ui/StoneButton";
 import { VolumeSlider } from "../ui/VolumeSlider";
 import { userSettings } from "../utils/userSettings";
 
@@ -19,7 +19,7 @@ export class SettingsPopup extends Container {
   /** The popup title label */
   private title: Text;
   /** Button that closes the popup */
-  private doneButton: Button;
+  private doneButton: StoneButton;
   /** The panel background */
   private panelBase: RoundedBox;
   /** The build version label */
@@ -44,22 +44,31 @@ export class SettingsPopup extends Container {
     this.panel = new Container();
     this.addChild(this.panel);
 
-    this.panelBase = new RoundedBox({ height: 425 });
+    this.panelBase = new RoundedBox({
+      height: 400,
+      color: 0x333333,
+      shadowColor: 0x111111,
+    });
     this.panel.addChild(this.panelBase);
 
     this.title = new Label({
       text: "Settings",
       style: {
-        fill: 0xec1561,
+        fill: 0xffcc00,
         fontSize: 50,
       },
     });
     this.title.y = -this.panelBase.boxHeight * 0.5 + 60;
     this.panel.addChild(this.title);
 
-    this.doneButton = new Button({ text: "OK" });
+    this.doneButton = new StoneButton({
+      text: "OK",
+      width: 200,
+      height: 56,
+      fontSize: 20,
+    });
     this.doneButton.y = this.panelBase.boxHeight * 0.5 - 78;
-    this.doneButton.onPress.connect(() => engine().navigation.dismissPopup());
+    this.doneButton.onPress = () => engine().navigation.dismissPopup();
     this.panel.addChild(this.doneButton);
 
     this.versionLabel = new Label({

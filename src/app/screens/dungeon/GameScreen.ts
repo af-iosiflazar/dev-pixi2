@@ -11,6 +11,7 @@ import {
 
 import { engine } from "../../getEngine";
 import { MainScreen } from "../main/MainScreen";
+import { StoneButton } from "../../ui/StoneButton";
 
 import {
   MAP_WIDTH,
@@ -44,7 +45,7 @@ enum GameState {
 }
 
 export class GameScreen extends Container {
-  public static assetBundles = ["default"];
+  public static assetBundles = ["default", "main"];
 
   private gameState = GameState.Playing;
   private map!: GameMap;
@@ -60,6 +61,7 @@ export class GameScreen extends Container {
   private entityContainer: Container;
   private mapGraphics: Graphics;
   private uiContainer: Container;
+  private menuButton: StoneButton;
   private hpText: Text;
   private turnText: Text;
   private messageTexts: Text[];
@@ -137,6 +139,17 @@ export class GameScreen extends Container {
     this.overlayText.anchor.set(0.5);
     this.overlayText.visible = false;
     this.addChild(this.overlayText);
+
+    this.menuButton = new StoneButton({
+      text: "Menu",
+      width: 80,
+      height: 36,
+      fontSize: 16,
+    });
+    this.menuButton.onPress = () => {
+      engine().navigation.showScreen(MainScreen);
+    };
+    this.addChild(this.menuButton);
 
     this.boundKeyDown = this.handleKeyDown.bind(this);
     this.boundKeyUp = this.handleKeyUp.bind(this);
@@ -557,6 +570,9 @@ export class GameScreen extends Container {
 
     this.overlayText.x = this.screenWidth / 2;
     this.overlayText.y = this.screenHeight / 2;
+
+    this.menuButton.x = this.screenWidth - 50;
+    this.menuButton.y = this.screenHeight - 28;
   }
 
   private render() {

@@ -2,9 +2,9 @@ import { animate } from "motion";
 import { BlurFilter, Container, Sprite, Texture } from "pixi.js";
 
 import { engine } from "../getEngine";
-import { Button } from "../ui/Button";
 import { Label } from "../ui/Label";
 import { RoundedBox } from "../ui/RoundedBox";
+import { StoneButton } from "../ui/StoneButton";
 
 /** Popup that shows up when gameplay is paused */
 export class PausePopup extends Container {
@@ -15,7 +15,7 @@ export class PausePopup extends Container {
   /** The popup title label */
   private title: Label;
   /** Button that closes the popup */
-  private doneButton: Button;
+  private doneButton: StoneButton;
   /** The panel background */
   private panelBase: RoundedBox;
 
@@ -30,19 +30,28 @@ export class PausePopup extends Container {
     this.panel = new Container();
     this.addChild(this.panel);
 
-    this.panelBase = new RoundedBox({ height: 300 });
+    this.panelBase = new RoundedBox({
+      height: 270,
+      color: 0x333333,
+      shadowColor: 0x111111,
+    });
     this.panel.addChild(this.panelBase);
 
     this.title = new Label({
       text: "Paused",
-      style: { fill: 0xec1561, fontSize: 50 },
+      style: { fill: 0xffcc00, fontSize: 50 },
     });
-    this.title.y = -80;
+    this.title.y = -70;
     this.panel.addChild(this.title);
 
-    this.doneButton = new Button({ text: "Resume" });
-    this.doneButton.y = 70;
-    this.doneButton.onPress.connect(() => engine().navigation.dismissPopup());
+    this.doneButton = new StoneButton({
+      text: "Resume",
+      width: 280,
+      height: 64,
+      fontSize: 22,
+    });
+    this.doneButton.y = 65;
+    this.doneButton.onPress = () => engine().navigation.dismissPopup();
     this.panel.addChild(this.doneButton);
   }
 

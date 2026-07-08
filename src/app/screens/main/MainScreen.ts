@@ -1,99 +1,146 @@
-import { FancyButton } from "@pixi/ui";
 import { animate } from "motion";
 import type { AnimationPlaybackControls } from "motion/react";
 import type { Ticker } from "pixi.js";
-import { Container } from "pixi.js";
+import { Container, Sprite, Text, TextStyle, Texture } from "pixi.js";
 
 import { engine } from "../../getEngine";
 import { PausePopup } from "../../popups/PausePopup";
 import { SettingsPopup } from "../../popups/SettingsPopup";
-import { Button } from "../../ui/Button";
+import { StoneButton } from "../../ui/StoneButton";
 
 import { GameScreen } from "../dungeon/GameScreen";
 
-import { Bouncer } from "./Bouncer";
+import { TILE_SIZE, SPRITE_SCALE, TileSpriteKey } from "../dungeon/constants";
+
+const ROOM_W = 28;
+const ROOM_H = 18;
 
 /** The screen that holds the app */
 export class MainScreen extends Container {
   /** Assets bundles required by this screen */
-  public static assetBundles = ["main"];
+  public static assetBundles = ["main", "default"];
 
-  public mainContainer: Container;
-  private pauseButton: FancyButton;
-  private settingsButton: FancyButton;
-  private playButton: Button;
-  private addButton: FancyButton;
-  private removeButton: FancyButton;
-  private bouncer: Bouncer;
-  private paused = false;
-
+  private dungeonContainer: Container;
+  private titleText: Text;
+  private playButton: StoneButton;
+  private settingsButton: StoneButton;
   constructor() {
     super();
 
-    this.mainContainer = new Container();
-    this.addChild(this.mainContainer);
-    this.bouncer = new Bouncer();
+    // --- Dungeon background ---
+    this.dungeonContainer = new Container();
+    this.addChild(this.dungeonContainer);
 
-    const buttonAnimations = {
-      hover: {
-        props: {
-          scale: { x: 1.1, y: 1.1 },
-        },
-        duration: 100,
-      },
-      pressed: {
-        props: {
-          scale: { x: 0.9, y: 0.9 },
-        },
-        duration: 100,
-      },
-    };
-    this.pauseButton = new FancyButton({
-      defaultView: "icon-pause.png",
-      anchor: 0.5,
-      animations: buttonAnimations,
-    });
-    this.pauseButton.onPress.connect(() =>
-      engine().navigation.presentPopup(PausePopup),
-    );
-    this.addChild(this.pauseButton);
+    const ox = -(ROOM_W * TILE_SIZE * SPRITE_SCALE) / 2;
+    const oy = -(ROOM_H * TILE_SIZE * SPRITE_SCALE) / 2;
 
-    this.settingsButton = new FancyButton({
-      defaultView: "icon-settings.png",
-      anchor: 0.5,
-      animations: buttonAnimations,
+    for (let y = 0; y < ROOM_H; y++) {
+      for (let x = 0; x < ROOM_W; x++) {
+        const isEdge =
+          x === 0 || x === ROOM_W - 1 || y === 0 || y === ROOM_H - 1;
+        let key: string;
+        if (isEdge) {
+          if (y === 0 || y === ROOM_H - 1) key = TileSpriteKey.wall;
+          else if (x === 0) key = TileSpriteKey.wallRight;
+          else key = TileSpriteKey.wallLeft;
+        } else {
+          key =
+            TileSpriteKey.floor[
+              Math.floor(Math.random() * TileSpriteKey.floor.length)
+            ];
+        }
+        const sprite = new Sprite(Texture.from(`${key}.png`));
+        sprite.scale.set(SPRITE_SCALE);
+        sprite.x = ox + x * TILE_SIZE * SPRITE_SCALE;
+        sprite.y = oy + y * TILE_SIZE * SPRITE_SCALE;
+        this.dungeonContainer.addChild(sprite);
+      }
+    }
+
+    // --- Decorative chests in the room ---
+    const chestPositions = [
+      { x: 3, y: Math.floor(ROOM_H / 2) },
+      { x: ROOM_W - 4, y: Math.floor(ROOM_H / 2) },
+    ];
+    for (const pos of chestPositions) {
+      const chest = new Sprite(Texture.from("chest_full_open_anim_f0.png"));
+      chest.scale.set(SPRITE_SCALE);
+      chest.anchor.set(0.5, 0.5);
+      chest.x =
+        ox + pos.x * TILE_SIZE * SPRITE_SCALE + (TILE_SIZE * SPRITE_SCALE) / 2;
+      chest.y =
+        oy + pos.y * TILE_SIZE * SPRITE_SCALE + (TILE_SIZE * SPRITE_SCALE) / 2;
+      this.dungeonContainer.addChild(chest);
+    }
+
+    // --- Potions on a side table area ---
+    const potionPositions = [
+      { x: 6, y: 4 },
+      { x: 6, y: 6 },
+      { x: ROOM_W - 7, y: 4 },
+      { x: ROOM_W - 7, y: 6 },
+    ];
+    const potionTypes = [
+      "flask_red",
+      "flask_blue",
+      "flask_green",
+      "flask_yellow",
+    ];
+    for (let i = 0; i < potionPositions.length; i++) {
+      const potion = new Sprite(
+        Texture.from(`${potionTypes[i % potionTypes.length]}.png`),
+      );
+      potion.scale.set(SPRITE_SCALE);
+      potion.anchor.set(0.5, 0.5);
+      potion.x =
+        ox +
+        potionPositions[i].x * TILE_SIZE * SPRITE_SCALE +
+        (TILE_SIZE * SPRITE_SCALE) / 2;
+      potion.y =
+        oy +
+        potionPositions[i].y * TILE_SIZE * SPRITE_SCALE +
+        (TILE_SIZE * SPRITE_SCALE) / 2;
+      this.dungeonContainer.addChild(potion);
+    }
+
+    // --- Title ---
+    this.titleText = new Text({
+      text: "DUNGEON\nCRAWLER",
+      style: new TextStyle({
+        fontFamily: "monospace",
+        fontSize: 64,
+        fill: 0xffcc00,
+        fontWeight: "bold",
+        align: "center",
+        dropShadow: {
+          color: 0x000000,
+          blur: 6,
+          distance: 4,
+        },
+      }),
     });
-    this.settingsButton.onPress.connect(() =>
-      engine().navigation.presentPopup(SettingsPopup),
-    );
+    this.titleText.anchor.set(0.5);
+    this.addChild(this.titleText);
+
+    // --- Buttons ---
+    this.settingsButton = new StoneButton({
+      text: "Settings",
+      width: 200,
+      height: 60,
+      fontSize: 24,
+    });
+    this.settingsButton.onPress = () =>
+      engine().navigation.presentPopup(SettingsPopup);
     this.addChild(this.settingsButton);
 
-    this.playButton = new Button({
-      text: "Play",
-      width: 200,
+    this.playButton = new StoneButton({
+      text: "Enter the Dungeon",
+      width: 320,
       height: 80,
-      fontSize: 36,
+      fontSize: 28,
     });
-    this.playButton.onPress.connect(() =>
-      engine().navigation.showScreen(GameScreen),
-    );
+    this.playButton.onPress = () => engine().navigation.showScreen(GameScreen);
     this.addChild(this.playButton);
-
-    this.addButton = new Button({
-      text: "Add",
-      width: 175,
-      height: 110,
-    });
-    this.addButton.onPress.connect(() => this.bouncer.add());
-    this.addChild(this.addButton);
-
-    this.removeButton = new Button({
-      text: "Remove",
-      width: 175,
-      height: 110,
-    });
-    this.removeButton.onPress.connect(() => this.bouncer.remove());
-    this.addChild(this.removeButton);
   }
 
   /** Prepare the screen just before showing */
@@ -101,21 +148,16 @@ export class MainScreen extends Container {
 
   /** Update the screen */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  public update(_time: Ticker) {
-    if (this.paused) return;
-    this.bouncer.update();
-  }
+  public update(_time: Ticker) {}
 
   /** Pause gameplay - automatically fired when a popup is presented */
   public async pause() {
-    this.mainContainer.interactiveChildren = false;
-    this.paused = true;
+    this.interactiveChildren = false;
   }
 
   /** Resume gameplay */
   public async resume() {
-    this.mainContainer.interactiveChildren = true;
-    this.paused = false;
+    this.interactiveChildren = true;
   }
 
   /** Fully reset */
@@ -126,20 +168,17 @@ export class MainScreen extends Container {
     const centerX = width * 0.5;
     const centerY = height * 0.5;
 
-    this.mainContainer.x = centerX;
-    this.mainContainer.y = centerY;
-    this.pauseButton.x = 30;
-    this.pauseButton.y = 30;
-    this.settingsButton.x = width - 30;
-    this.settingsButton.y = 30;
-    this.playButton.x = width / 2;
-    this.playButton.y = height / 2;
-    this.removeButton.x = width / 2 - 100;
-    this.removeButton.y = height - 75;
-    this.addButton.x = width / 2 + 100;
-    this.addButton.y = height - 75;
+    this.dungeonContainer.x = centerX;
+    this.dungeonContainer.y = centerY;
 
-    this.bouncer.resize(width, height);
+    this.titleText.x = centerX;
+    this.titleText.y = centerY - 140;
+
+    this.playButton.x = centerX;
+    this.playButton.y = centerY + 60;
+
+    this.settingsButton.x = centerX;
+    this.settingsButton.y = centerY + 150;
   }
 
   /** Show screen with animations */
@@ -147,11 +186,9 @@ export class MainScreen extends Container {
     engine().audio.bgm.play("main/sounds/bgm-main.mp3", { volume: 0.5 });
 
     const elementsToAnimate = [
-      this.pauseButton,
-      this.settingsButton,
+      this.titleText,
       this.playButton,
-      this.addButton,
-      this.removeButton,
+      this.settingsButton,
     ];
 
     let finalPromise!: AnimationPlaybackControls;
@@ -160,12 +197,11 @@ export class MainScreen extends Container {
       finalPromise = animate(
         element,
         { alpha: 1 },
-        { duration: 0.3, delay: 0.75, ease: "backOut" },
+        { duration: 0.4, delay: 0.5, ease: "backOut" },
       );
     }
 
     await finalPromise;
-    this.bouncer.show(this);
   }
 
   /** Hide screen with animations */
