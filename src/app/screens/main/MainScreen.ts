@@ -23,6 +23,7 @@ export class MainScreen extends Container {
   private dungeonContainer: Container;
   private titleText: Text;
   private playButton: StoneButton;
+  private tutorialButton: StoneButton;
   private settingsButton: StoneButton;
   constructor() {
     super();
@@ -141,6 +142,18 @@ export class MainScreen extends Container {
     });
     this.playButton.onPress = () => engine().navigation.showScreen(GameScreen);
     this.addChild(this.playButton);
+
+    this.tutorialButton = new StoneButton({
+      text: "Tutorial",
+      width: 200,
+      height: 60,
+      fontSize: 24,
+    });
+    this.tutorialButton.onPress = () => {
+      GameScreen.nextLevelId = "tutorial";
+      engine().navigation.showScreen(GameScreen);
+    };
+    this.addChild(this.tutorialButton);
   }
 
   /** Prepare the screen just before showing */
@@ -172,13 +185,16 @@ export class MainScreen extends Container {
     this.dungeonContainer.y = centerY;
 
     this.titleText.x = centerX;
-    this.titleText.y = centerY - 140;
+    this.titleText.y = centerY - 150;
 
     this.playButton.x = centerX;
-    this.playButton.y = centerY + 60;
+    this.playButton.y = centerY + 40;
+
+    this.tutorialButton.x = centerX;
+    this.tutorialButton.y = centerY + 105;
 
     this.settingsButton.x = centerX;
-    this.settingsButton.y = centerY + 150;
+    this.settingsButton.y = centerY + 170;
   }
 
   /** Show screen with animations */
@@ -188,6 +204,7 @@ export class MainScreen extends Container {
     const elementsToAnimate = [
       this.titleText,
       this.playButton,
+      this.tutorialButton,
       this.settingsButton,
     ];
 

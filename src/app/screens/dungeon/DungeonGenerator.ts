@@ -5,6 +5,10 @@ export interface GenerationResult {
   tiles: TileType[][];
   rooms: Rect[];
   playerStart: { x: number; y: number };
+  /** Pre-defined entities (for puzzle levels — skip random placement) */
+  entities?: Array<{ type: string; x: number; y: number; level?: number }>;
+  /** Pre-defined decorations (for puzzle levels — skip random placement) */
+  decorations?: Array<{ type: string; x: number; y: number }>;
 }
 
 function carveRoom(tiles: TileType[][], room: Rect) {

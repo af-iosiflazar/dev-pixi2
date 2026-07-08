@@ -26,7 +26,9 @@ import {
   DECORATIONS_PER_ROOM,
 } from "./constants";
 import type { DecorationType } from "./constants";
-import { generateDungeon } from "./DungeonGenerator";
+import { generateDungeon, type GenerationResult } from "./DungeonGenerator";
+import { loadLevel } from "../../levels/LevelLoader";
+import type { LevelHooks } from "../../levels/LevelData";
 import { GameMap } from "./GameMap";
 import { Entity, createPlayer, createEnemy } from "./Entity";
 
@@ -47,6 +49,9 @@ enum GameState {
 export class GameScreen extends Container {
   public static assetBundles = ["default", "main"];
 
+  /** Set before calling showScreen(GameScreen) to load a puzzle level instead of random generation */
+  public static nextLevelId: string | undefined;
+
   private gameState = GameState.Playing;
   private map!: GameMap;
   private player!: Entity;
@@ -54,6 +59,8 @@ export class GameScreen extends Container {
   private decorations: Decoration[] = [];
   private messages: string[] = [];
   private turnCount = 0;
+  private currentLevelId?: string;
+  private levelHooks?: LevelHooks;
 
   private mapContainer: Container;
   private tileContainer: Container;
@@ -156,12 +163,25 @@ export class GameScreen extends Container {
   }
 
   prepare() {
+    // If a level is pending, skip sync init — show() will do the async load
+    if (GameScreen.nextLevelId) {
+      return;
+    }
     this.initGame();
   }
 
   async show() {
     document.addEventListener("keydown", this.boundKeyDown);
     document.addEventListener("keyup", this.boundKeyUp);
+
+    if (GameScreen.nextLevelId) {
+      // Hide during async load to avoid showing a blank/partially-initialised screen
+      this.visible = false;
+      const levelId = GameScreen.nextLevelId;
+      GameScreen.nextLevelId = undefined;
+      await this.initGame(levelId);
+    }
+
     this.visible = true;
   }
 
@@ -182,6 +202,8 @@ export class GameScreen extends Container {
     this.enemies = [];
     this.decorations = [];
     this.messages = [];
+    this.currentLevelId = undefined;
+    this.levelHooks = undefined;
     this.tileContainer.removeChildren();
     this.decorationContainer.removeChildren();
     this.entityContainer.removeChildren();
@@ -201,8 +223,18 @@ export class GameScreen extends Container {
     this.layoutUI();
   }
 
-  private initGame() {
-    const result = generateDungeon();
+  private async initGame(levelId?: string) {
+    // Resolve the map data
+    let result: GenerationResult & { hooks?: LevelHooks };
+    if (levelId) {
+      this.currentLevelId = levelId;
+      result = await loadLevel(levelId);
+    } else {
+      this.currentLevelId = undefined;
+      result = generateDungeon();
+    }
+    this.levelHooks = result.hooks;
+
     this.map = new GameMap(result.tiles);
     this.enemies = [];
     this.messages = [];
@@ -212,28 +244,42 @@ export class GameScreen extends Container {
     this.player = createPlayer(result.playerStart.x, result.playerStart.y);
     this.map.computeFOV(this.player.x, this.player.y);
 
-    for (let i = 1; i < result.rooms.length; i++) {
-      const room = result.rooms[i];
-      const numEnemies = 1 + Math.floor(Math.random() * 2);
-      for (let e = 0; e < numEnemies; e++) {
-        const ex = room.x + 1 + Math.floor(Math.random() * (room.w - 2));
-        const ey = room.y + 1 + Math.floor(Math.random() * (room.h - 2));
-        const enemy = createEnemy(ex, ey, 1);
+    // Place enemies
+    if (result.entities) {
+      for (const ed of result.entities) {
+        const enemy = createEnemy(ed.x, ed.y, ed.level ?? 1);
         this.enemies.push(enemy);
+      }
+    } else {
+      for (let i = 1; i < result.rooms.length; i++) {
+        const room = result.rooms[i];
+        const numEnemies = 1 + Math.floor(Math.random() * 2);
+        for (let e = 0; e < numEnemies; e++) {
+          const ex = room.x + 1 + Math.floor(Math.random() * (room.w - 2));
+          const ey = room.y + 1 + Math.floor(Math.random() * (room.h - 2));
+          const enemy = createEnemy(ex, ey, 1);
+          this.enemies.push(enemy);
+        }
       }
     }
 
     // Place decorations
     this.decorations = [];
     this.decorationContainer.removeChildren();
-    const occupiedTiles = new Set<string>();
-    occupiedTiles.add(`${this.player.x},${this.player.y}`);
-    for (const enemy of this.enemies) {
-      occupiedTiles.add(`${enemy.x},${enemy.y}`);
-    }
-    for (let ri = 1; ri < result.rooms.length; ri++) {
-      const room = result.rooms[ri];
-      this.placeDecorationsInRoom(room, occupiedTiles);
+    if (result.decorations) {
+      for (const dd of result.decorations) {
+        this.addDecoration(dd.x, dd.y, dd.type as DecorationType);
+      }
+    } else {
+      const occupiedTiles = new Set<string>();
+      occupiedTiles.add(`${this.player.x},${this.player.y}`);
+      for (const enemy of this.enemies) {
+        occupiedTiles.add(`${enemy.x},${enemy.y}`);
+      }
+      for (let ri = 1; ri < result.rooms.length; ri++) {
+        const room = result.rooms[ri];
+        this.placeDecorationsInRoom(room, occupiedTiles);
+      }
     }
 
     // Create tile sprites
@@ -266,8 +312,15 @@ export class GameScreen extends Container {
     }
 
     this.overlayText.visible = false;
-    this.addMessage("You descend into the dungeon...");
+    if (levelId) {
+      this.addMessage(`Welcome to "${levelId}"!`);
+    } else {
+      this.addMessage("You descend into the dungeon...");
+    }
     this.render();
+
+    // Fire the onLoad hook after everything is set up
+    this.levelHooks?.onLoad?.(this);
   }
 
   private placeDecorationsInRoom(
@@ -393,7 +446,7 @@ export class GameScreen extends Container {
         this.keysPressed.has("R")
       ) {
         this.keysPressed.clear();
-        this.initGame();
+        this.initGame(this.currentLevelId);
         return;
       }
       if (
@@ -509,6 +562,9 @@ export class GameScreen extends Container {
     this.render();
 
     this.gameState = GameState.Playing;
+
+    // Fire per-turn hook for puzzle levels
+    this.levelHooks?.onTurn?.(this);
   }
 
   private checkGameState() {
@@ -519,6 +575,17 @@ export class GameScreen extends Container {
       return;
     }
 
+    // Custom win condition (puzzle levels)
+    if (this.levelHooks?.winCondition?.(this)) {
+      this.gameState = GameState.Victory;
+      this.addMessage("You completed the puzzle!");
+      this.showOverlay(
+        "PUZZLE COMPLETE!\n\nPress R to play again\nPress Q to quit",
+      );
+      return;
+    }
+
+    // Default win condition: all enemies dead
     const aliveEnemies = this.enemies.filter((e) => e.isAlive);
     if (aliveEnemies.length === 0) {
       this.gameState = GameState.Victory;
@@ -540,6 +607,9 @@ export class GameScreen extends Container {
   }
 
   private updateCamera() {
+    // Not yet initialised (level loads in show(), but resize is called first)
+    if (!this.player) return;
+
     const camX =
       this.screenWidth / 2 - this.player.x * TILE_SIZE - TILE_SIZE / 2;
     const camY =
